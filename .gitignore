@@ -1,0 +1,22 @@
+# Atlassian installation archives
+roles/bitbucket/files/*.tar.gz
+
+# Ansible retry files
+*.retry
+
+# Vault password files
+.vault_pass
+.vault-password
+vault-password*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak

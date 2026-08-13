@@ -1,0 +1,191 @@
+---
+# ============================================================
+# Bitbucket Data Center - Prerequisites
+# ============================================================
+
+- name: Install Bitbucket prerequisite packages
+  ansible.builtin.dnf:
+    name:
+      - "{{ bitbucket_java_package }}"
+      - git
+      - tar
+      - gzip
+      - unzip
+      - rsync
+      - curl
+      - wget
+      - fontconfig
+      - procps-ng
+      - util-linux
+      - nfs-utils
+      - bind-utils
+    state: present
+
+# ------------------------------------------------------------
+# Service account
+# ------------------------------------------------------------
+
+- name: Create Bitbucket group
+  ansible.builtin.group:
+    name: "{{ bitbucket_group }}"
+    state: present
+    system: true
+
+- name: Create Bitbucket service user
+  ansible.builtin.user:
+    name: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    comment: "Atlassian Bitbucket Data Center"
+    home: "{{ bitbucket_home }}"
+    shell: /bin/bash
+    system: true
+    create_home: false
+    state: present
+
+# ------------------------------------------------------------
+# Directories
+# ------------------------------------------------------------
+
+- name: Create Bitbucket home directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+
+- name: Create Bitbucket shared configuration directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}/shared"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+
+# ------------------------------------------------------------
+# Java validation
+# ------------------------------------------------------------
+
+- name: Get installed Java version
+  ansible.builtin.command:
+    cmd: java -version
+  register: bitbucket_java_version
+  changed_when: false
+  check_mode: false
+
+- name: Display installed Java version
+  ansible.builtin.debug:
+    var: bitbucket_java_version.stderr_lines
+
+- name: Verify Java 21 is installed
+  ansible.builtin.assert:
+    that:
+      - "'21' in bitbucket_java_version.stderr"
+    fail_msg: >-
+      Java 21 validation failed.
+
+      Detected Java:
+      {{ bitbucket_java_version.stderr }}
+
+      Bitbucket 10.x requires the Java baseline
+      configured by this automation.
+    success_msg: "Java 21 validated successfully."
+
+
+# ------------------------------------------------------------
+# Git validation
+# ------------------------------------------------------------
+
+- name: Get installed Git version
+  ansible.builtin.command:
+    cmd: git --version
+  register: bitbucket_git_version_output
+  changed_when: false
+  check_mode: false
+
+- name: Display raw Git version
+  ansible.builtin.debug:
+    msg: "{{ bitbucket_git_version_output.stdout }}"
+
+- name: Extract Git version
+  ansible.builtin.set_fact:
+    bitbucket_git_version: >-
+      {{
+        bitbucket_git_version_output.stdout
+        | regex_replace('^git version ', '')
+        | trim
+      }}
+
+- name: Display installed Git version
+  ansible.builtin.debug:
+    msg: "Installed Git version: {{ bitbucket_git_version }}"
+
+- name: Verify Git minimum version
+  ansible.builtin.assert:
+    that:
+      - bitbucket_git_version is version('2.42.0', '>=')
+    fail_msg: >-
+      Unsupported Git version:
+      {{ bitbucket_git_version }}.
+
+      Bitbucket 10.x requires Git >= 2.42.
+    success_msg: >-
+      Git version validated:
+      {{ bitbucket_git_version }}.
+
+# ------------------------------------------------------------
+# PostgreSQL client
+# ------------------------------------------------------------
+
+- name: Check PostgreSQL client
+  ansible.builtin.command:
+    cmd: psql --version
+  register: bitbucket_psql_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Display PostgreSQL client version
+  ansible.builtin.debug:
+    msg: "{{ bitbucket_psql_check.stdout }}"
+  when: bitbucket_psql_check.rc == 0
+
+# ------------------------------------------------------------
+# JAVA_HOME
+# ------------------------------------------------------------
+
+- name: Verify configured JAVA_HOME exists
+  ansible.builtin.stat:
+    path: "{{ bitbucket_java_home }}"
+    follow: true
+  register: bitbucket_java_home_check
+
+- name: Validate JAVA_HOME
+  ansible.builtin.assert:
+    that:
+      - bitbucket_java_home_check.stat.exists
+      - bitbucket_java_home_check.stat.isdir
+    fail_msg: >-
+      Configured JAVA_HOME does not exist or is not a directory:
+      {{ bitbucket_java_home }}
+    success_msg: >-
+      JAVA_HOME validated successfully:
+      {{ bitbucket_java_home }}
+
+# ------------------------------------------------------------
+# Prerequisites summary
+# ------------------------------------------------------------
+
+- name: Bitbucket prerequisites summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket prerequisites completed"
+      - "Java      : Java 21"
+      - "JAVA_HOME : {{ bitbucket_java_home }}"
+      - "Git       : {{ bitbucket_git_version }}"
+      - "User      : {{ bitbucket_user }}"
+      - "Group     : {{ bitbucket_group }}"
+      - "Home      : {{ bitbucket_home }}"
+      - "Shared    : {{ bitbucket_shared_home if bitbucket_clustered else 'Not configured' }}"
+      - "========================================"

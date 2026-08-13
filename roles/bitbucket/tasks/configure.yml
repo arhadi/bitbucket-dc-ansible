@@ -1,0 +1,81 @@
+---
+# ============================================================
+# Bitbucket Data Center - Configuration
+# ============================================================
+
+- name: Create Bitbucket shared directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}/shared"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+
+- name: Create Bitbucket log directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}/log"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+
+- name: Create Bitbucket temporary directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}/tmp"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+
+# ------------------------------------------------------------
+# BITBUCKET_HOME
+# ------------------------------------------------------------
+
+- name: Configure BITBUCKET_HOME
+  ansible.builtin.lineinfile:
+    path: "{{ bitbucket_install_dir }}/bin/set-bitbucket-home.sh"
+    regexp: '^[#[:space:]]*export[[:space:]]+BITBUCKET_HOME='
+    line: 'export BITBUCKET_HOME="{{ bitbucket_home }}"'
+    insertafter: EOF
+    backup: true
+
+# ------------------------------------------------------------
+# bitbucket.properties
+# ------------------------------------------------------------
+
+- name: Configure Bitbucket properties
+  ansible.builtin.template:
+    src: bitbucket.properties.j2
+    dest: "{{ bitbucket_home }}/shared/bitbucket.properties"
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0600"
+  no_log: true
+
+# ------------------------------------------------------------
+# Permissions
+# ------------------------------------------------------------
+
+- name: Set Bitbucket home directory ownership
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+
+- name: Configuration summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket configuration completed"
+      - "BITBUCKET_HOME : {{ bitbucket_home }}"
+      - "Properties     : {{ bitbucket_home }}/shared/bitbucket.properties"
+      - "Database       : {{ postgres_host }}:{{ postgres_port }}/{{ postgres_database }}"
+      - "HTTP           : {{ bitbucket_http_port }}"
+      - "SSH            : {{ bitbucket_ssh_port }}"
+      - "========================================"

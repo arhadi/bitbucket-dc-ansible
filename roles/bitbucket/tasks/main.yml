@@ -1,0 +1,25 @@
+---
+- name: Run Bitbucket prechecks
+  ansible.builtin.include_tasks: precheck.yml
+
+- name: Install Bitbucket prerequisites
+  ansible.builtin.include_tasks: prerequisites.yml
+
+- name: Install Bitbucket
+  ansible.builtin.include_tasks: install.yml
+
+- name: Validate Bitbucket database
+  ansible.builtin.include_tasks: database.yml
+
+- name: Configure Bitbucket
+  ansible.builtin.include_tasks: configure.yml
+
+- name: Configure Bitbucket Data Center cluster
+  ansible.builtin.include_tasks: cluster.yml
+  when: bitbucket_clustered | bool
+
+- name: Configure Bitbucket systemd service
+  ansible.builtin.include_tasks: systemd.yml
+
+- name: Validate Bitbucket
+  ansible.builtin.include_tasks: validate.yml

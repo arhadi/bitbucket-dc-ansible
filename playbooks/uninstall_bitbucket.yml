@@ -1,0 +1,15 @@
+---
+# ============================================================
+# Bitbucket Data Center - Uninstall Playbook
+# ============================================================
+
+- name: Uninstall Bitbucket Data Center
+  hosts: bitbucket
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Run Bitbucket uninstall
+      ansible.builtin.include_role:
+        name: bitbucket
+        tasks_from: uninstall

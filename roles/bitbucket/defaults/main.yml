@@ -1,0 +1,38 @@
+---
+bitbucket_version: "10.4.2"
+
+bitbucket_user: bitbucket
+bitbucket_group: bitbucket
+
+bitbucket_base_dir: /app
+
+bitbucket_install_dir:
+  "{{ bitbucket_base_dir }}/bitbucket-{{ bitbucket_version }}"
+
+bitbucket_home:
+  "{{ bitbucket_base_dir }}/bitbucket-data"
+
+bitbucket_shared_home:
+  "{{ bitbucket_base_dir }}/bitbucket-shared"
+
+bitbucket_archive:
+  "atlassian-bitbucket-{{ bitbucket_version }}.tar.gz"
+
+bitbucket_java_package: java-21-openjdk
+bitbucket_java_home: /usr/lib/jvm/java-21-openjdk
+
+bitbucket_http_port: 7990
+bitbucket_ssh_port: 7999
+
+bitbucket_clustered: false
+
+postgres_host: localhost
+postgres_port: 5432
+postgres_database: bitbucket
+postgres_user: bitbucket
+postgres_password: ""
+
+bitbucket_service_name: bitbucket
+
+bitbucket_jvm_minimum_memory: 2g
+bitbucket_jvm_maximum_memory: 4g

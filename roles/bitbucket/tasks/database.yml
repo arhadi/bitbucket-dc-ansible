@@ -1,0 +1,189 @@
+---
+# ============================================================
+# Bitbucket Data Center - PostgreSQL Validation
+# ============================================================
+
+- name: Check PostgreSQL TCP connectivity
+  ansible.builtin.wait_for:
+    host: "{{ postgres_host }}"
+    port: "{{ postgres_port }}"
+    timeout: 10
+    state: started
+
+- name: Get PostgreSQL client version
+  ansible.builtin.command:
+    cmd: psql --version
+  register: bitbucket_psql_version
+  changed_when: false
+  check_mode: false
+
+- name: Display PostgreSQL client version
+  ansible.builtin.debug:
+    msg: "{{ bitbucket_psql_version.stdout }}"
+
+# ------------------------------------------------------------
+# Authentication
+# ------------------------------------------------------------
+
+- name: Validate Bitbucket database authentication
+  ansible.builtin.command:
+    argv:
+      - psql
+      - "--host={{ postgres_host }}"
+      - "--port={{ postgres_port | string }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_database }}"
+      - --no-password
+      - --tuples-only
+      - --no-align
+      - "--command=SELECT current_database() || '|' || current_user;"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  register: bitbucket_database_auth
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Validate database identity
+  ansible.builtin.assert:
+    that:
+      - bitbucket_database_auth.rc == 0
+      - postgres_database in bitbucket_database_auth.stdout
+      - postgres_user in bitbucket_database_auth.stdout
+    fail_msg: >-
+      Unable to authenticate to PostgreSQL database
+      {{ postgres_database }} at
+      {{ postgres_host }}:{{ postgres_port }}
+      using role {{ postgres_user }}.
+    success_msg: >-
+      PostgreSQL authentication validated successfully.
+
+# ------------------------------------------------------------
+# PostgreSQL server version
+# ------------------------------------------------------------
+
+- name: Query PostgreSQL server version
+  ansible.builtin.command:
+    argv:
+      - psql
+      - "--host={{ postgres_host }}"
+      - "--port={{ postgres_port | string }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_database }}"
+      - --no-password
+      - --tuples-only
+      - --no-align
+      - "--command=SHOW server_version;"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  register: bitbucket_postgres_server_version
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Store PostgreSQL server version
+  ansible.builtin.set_fact:
+    bitbucket_postgres_version_detected: >-
+      {{
+        bitbucket_postgres_server_version.stdout
+        | trim
+      }}
+
+- name: Validate PostgreSQL 17 server
+  ansible.builtin.assert:
+    that:
+      - bitbucket_postgres_version_detected is version('17.0', '>=')
+      - bitbucket_postgres_version_detected is version('18.0', '<')
+    fail_msg: >-
+      This deployment baseline requires PostgreSQL 17.
+      Detected PostgreSQL:
+      {{ bitbucket_postgres_version_detected }}.
+    success_msg: >-
+      PostgreSQL {{ bitbucket_postgres_version_detected }}
+      validated successfully.
+
+# ------------------------------------------------------------
+# Database encoding
+# ------------------------------------------------------------
+
+- name: Query Bitbucket database encoding
+  ansible.builtin.command:
+    argv:
+      - psql
+      - "--host={{ postgres_host }}"
+      - "--port={{ postgres_port | string }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_database }}"
+      - --no-password
+      - --tuples-only
+      - --no-align
+      - "--command=SHOW server_encoding;"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  register: bitbucket_database_encoding
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Validate Bitbucket database encoding
+  ansible.builtin.assert:
+    that:
+      - bitbucket_database_encoding.stdout | trim == 'UTF8'
+    fail_msg: >-
+      Bitbucket database must use UTF8 encoding.
+      Detected:
+      {{ bitbucket_database_encoding.stdout | trim }}.
+    success_msg: "Bitbucket database encoding validated: UTF8."
+
+# ------------------------------------------------------------
+# Database owner
+# ------------------------------------------------------------
+
+- name: Query Bitbucket database owner
+  ansible.builtin.command:
+    argv:
+      - psql
+      - "--host={{ postgres_host }}"
+      - "--port={{ postgres_port | string }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_database }}"
+      - --no-password
+      - --tuples-only
+      - --no-align
+      - "--command=SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database();"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  register: bitbucket_database_owner
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Validate Bitbucket database owner
+  ansible.builtin.assert:
+    that:
+      - bitbucket_database_owner.stdout | trim == postgres_user
+    fail_msg: >-
+      Unexpected Bitbucket database owner.
+      Expected: {{ postgres_user }}
+      Detected: {{ bitbucket_database_owner.stdout | trim }}
+    success_msg: >-
+      Bitbucket database owner validated:
+      {{ postgres_user }}.
+
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+
+- name: Bitbucket database validation summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket PostgreSQL validation completed"
+      - "Host       : {{ postgres_host }}"
+      - "Port       : {{ postgres_port }}"
+      - "Version    : {{ bitbucket_postgres_version_detected }}"
+      - "Database   : {{ postgres_database }}"
+      - "User       : {{ postgres_user }}"
+      - "Owner      : {{ bitbucket_database_owner.stdout | trim }}"
+      - "Encoding   : {{ bitbucket_database_encoding.stdout | trim }}"
+      - "========================================"

@@ -1,0 +1,8 @@
+---
+- name: Install Bitbucket Data Center
+  hosts: bitbucket
+  become: true
+  gather_facts: true
+
+  roles:
+    - bitbucket

@@ -1,0 +1,42 @@
+---
+# ============================================================
+# Bitbucket Data Center - systemd
+# ============================================================
+
+- name: Install Bitbucket systemd service
+  ansible.builtin.template:
+    src: bitbucket.service.j2
+    dest: "/etc/systemd/system/{{ bitbucket_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bitbucket_systemd_unit
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: bitbucket_systemd_unit.changed
+
+- name: Restart Bitbucket when systemd configuration changes
+  ansible.builtin.systemd:
+    name: "{{ bitbucket_service_name }}"
+    state: restarted
+    enabled: true
+  when: bitbucket_systemd_unit.changed
+
+- name: Ensure Bitbucket service is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ bitbucket_service_name }}"
+    state: started
+    enabled: true
+
+- name: Gather service facts after Bitbucket startup
+  ansible.builtin.service_facts:
+
+- name: Validate Bitbucket service exists
+  ansible.builtin.assert:
+    that:
+      - "(bitbucket_service_name + '.service') in ansible_facts.services"
+    fail_msg: >-
+      Bitbucket systemd service was not registered:
+      {{ bitbucket_service_name }}.service

@@ -1,0 +1,174 @@
+---
+# ============================================================
+# Bitbucket Data Center - Uninstall
+# ============================================================
+#
+# Default behavior:
+#   - Stop Bitbucket
+#   - Disable Bitbucket service
+#   - Remove systemd unit
+#   - Remove Bitbucket installation directory
+#   - Preserve BITBUCKET_HOME
+#   - Preserve PostgreSQL database
+#
+# Optional:
+#   bitbucket_purge_data=true
+#     Removes BITBUCKET_HOME as well.
+#
+# PostgreSQL database/user are NEVER removed by this role.
+# PostgreSQL lifecycle belongs to postgresql-ansible.
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Display uninstall plan
+# ------------------------------------------------------------
+
+- name: Display Bitbucket uninstall plan
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket uninstall"
+      - "Install Dir : {{ bitbucket_install_dir }}"
+      - "Home Dir    : {{ bitbucket_home }}"
+      - "Service     : {{ bitbucket_service_name }}"
+      - "Purge Data  : {{ bitbucket_purge_data | default(false) | bool }}"
+      - "Database    : {{ postgres_database }} - PRESERVED"
+      - "DB User     : {{ postgres_user }} - PRESERVED"
+      - "========================================"
+
+
+# ------------------------------------------------------------
+# Discover Bitbucket service
+# ------------------------------------------------------------
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Determine whether Bitbucket service exists
+  ansible.builtin.set_fact:
+    bitbucket_service_exists: >-
+      {{
+        (bitbucket_service_name + '.service')
+        in ansible_facts.services
+      }}
+
+
+# ------------------------------------------------------------
+# Stop and disable Bitbucket
+# ------------------------------------------------------------
+
+- name: Stop Bitbucket service
+  ansible.builtin.systemd:
+    name: "{{ bitbucket_service_name }}"
+    state: stopped
+  when: bitbucket_service_exists | bool
+
+- name: Disable Bitbucket service
+  ansible.builtin.systemd:
+    name: "{{ bitbucket_service_name }}"
+    enabled: false
+  when: bitbucket_service_exists | bool
+
+
+# ------------------------------------------------------------
+# Remove systemd unit
+# ------------------------------------------------------------
+
+- name: Remove Bitbucket systemd service
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ bitbucket_service_name }}.service"
+    state: absent
+  register: bitbucket_systemd_unit_removed
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: bitbucket_systemd_unit_removed.changed
+
+
+# ------------------------------------------------------------
+# Remove Bitbucket application binaries
+# ------------------------------------------------------------
+
+- name: Remove Bitbucket installation directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_install_dir }}"
+    state: absent
+
+
+# ------------------------------------------------------------
+# Optional data purge
+# ------------------------------------------------------------
+
+- name: Remove Bitbucket home directory
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}"
+    state: absent
+  when: bitbucket_purge_data | default(false) | bool
+
+
+# ------------------------------------------------------------
+# Service account
+#
+# Only remove account during explicit data purge.
+# ------------------------------------------------------------
+
+- name: Remove Bitbucket service user
+  ansible.builtin.user:
+    name: "{{ bitbucket_user }}"
+    state: absent
+    remove: false
+  when: bitbucket_purge_data | default(false) | bool
+
+- name: Remove Bitbucket service group
+  ansible.builtin.group:
+    name: "{{ bitbucket_group }}"
+    state: absent
+  when: bitbucket_purge_data | default(false) | bool
+
+
+# ------------------------------------------------------------
+# Final status
+# ------------------------------------------------------------
+
+- name: Check Bitbucket installation directory after uninstall
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}"
+  register: bitbucket_install_after_uninstall
+
+- name: Check Bitbucket home after uninstall
+  ansible.builtin.stat:
+    path: "{{ bitbucket_home }}"
+  register: bitbucket_home_after_uninstall
+
+- name: Validate Bitbucket application removal
+  ansible.builtin.assert:
+    that:
+      - not bitbucket_install_after_uninstall.stat.exists
+    fail_msg: >-
+      Bitbucket installation directory still exists:
+      {{ bitbucket_install_dir }}
+    success_msg: "Bitbucket application binaries removed successfully."
+
+
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+
+- name: Bitbucket uninstall summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket uninstall completed"
+      - "Install Dir : {{ bitbucket_install_dir }} - REMOVED"
+      - >-
+        Home Dir    : {{ bitbucket_home }} -
+        {{
+          'REMOVED'
+          if (bitbucket_purge_data | default(false) | bool)
+          else 'PRESERVED'
+        }}
+      - "Database    : {{ postgres_database }} - PRESERVED"
+      - "DB User     : {{ postgres_user }} - PRESERVED"
+      - "========================================"

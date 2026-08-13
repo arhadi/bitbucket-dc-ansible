@@ -1,0 +1,14 @@
+---
+# ============================================================
+# Bitbucket Data Center - Cluster Configuration
+# ============================================================
+
+- name: Display Bitbucket Data Center deployment mode
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket Data Center mode"
+      - "Node        : {{ inventory_hostname }}"
+      - "Home        : {{ bitbucket_home }}"
+      - "Shared      : {{ bitbucket_home }}/shared"
+      - "========================================"

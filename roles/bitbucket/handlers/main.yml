@@ -1,0 +1,11 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart Bitbucket
+  ansible.builtin.systemd:
+    name: "{{ bitbucket_service_name }}"
+    state: restarted
+  when:
+    - bitbucket_service_name is defined

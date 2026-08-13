@@ -1,0 +1,11 @@
+---
+- name: Validate Bitbucket Data Center
+  hosts: bitbucket
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Run Bitbucket validation
+      ansible.builtin.include_role:
+        name: bitbucket
+        tasks_from: validate

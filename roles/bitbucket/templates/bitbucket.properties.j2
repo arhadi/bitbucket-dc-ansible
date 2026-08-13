@@ -1,0 +1,30 @@
+# ============================================================
+# Atlassian Bitbucket Data Center
+# Managed by Ansible
+#
+# DO NOT EDIT MANUALLY
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Database - PostgreSQL
+# ------------------------------------------------------------
+
+jdbc.driver=org.postgresql.Driver
+jdbc.url=jdbc:postgresql://{{ postgres_host }}:{{ postgres_port }}/{{ postgres_database }}
+jdbc.user={{ postgres_user }}
+jdbc.password={{ postgres_password }}
+
+
+# ------------------------------------------------------------
+# Bitbucket HTTP
+# ------------------------------------------------------------
+
+server.port={{ bitbucket_http_port }}
+
+
+# ------------------------------------------------------------
+# Bitbucket SSH
+# ------------------------------------------------------------
+
+plugin.ssh.port={{ bitbucket_ssh_port }}

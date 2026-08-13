@@ -1,0 +1,311 @@
+---
+# ============================================================
+# Bitbucket Data Center - Prechecks
+# ============================================================
+
+- name: Display Bitbucket deployment information
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket Data Center Precheck"
+      - "========================================"
+      - "Version          : {{ bitbucket_version }}"
+      - "Install Dir      : {{ bitbucket_install_dir }}"
+      - "Home Dir         : {{ bitbucket_home }}"
+      - "Clustered        : {{ bitbucket_clustered }}"
+      - "HTTP Port        : {{ bitbucket_http_port }}"
+      - "SSH Port         : {{ bitbucket_ssh_port }}"
+      - "PostgreSQL Host  : {{ postgres_host }}"
+      - "PostgreSQL Port  : {{ postgres_port }}"
+      - "Database         : {{ postgres_database }}"
+      - "========================================"
+
+# ------------------------------------------------------------
+# Operating System
+# ------------------------------------------------------------
+
+- name: Verify operating system family
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+    fail_msg: >-
+      Unsupported operating system family:
+      {{ ansible_facts['os_family'] }}.
+      This automation requires RHEL-compatible Linux.
+    success_msg: "Operating system family is RedHat."
+
+- name: Verify RHEL major version
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution_major_version'] | int == 9
+    fail_msg: >-
+      Unsupported OS version:
+      {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}.
+      RHEL 9 is required.
+    success_msg: >-
+      Operating system validated:
+      {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}.
+
+# ------------------------------------------------------------
+# Architecture
+# ------------------------------------------------------------
+
+- name: Verify server architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] == 'x86_64'
+    fail_msg: >-
+      Unsupported architecture:
+      {{ ansible_facts['architecture'] }}.
+    success_msg: >-
+      Architecture validated:
+      {{ ansible_facts['architecture'] }}.
+
+# ------------------------------------------------------------
+# Installation archive
+# ------------------------------------------------------------
+
+- name: Check Bitbucket installation archive
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ bitbucket_archive }}"
+  delegate_to: localhost
+  become: false
+  register: bitbucket_archive_check
+
+- name: Verify Bitbucket installation archive exists
+  ansible.builtin.assert:
+    that:
+      - bitbucket_archive_check.stat.exists
+      - bitbucket_archive_check.stat.isreg
+    fail_msg: >-
+      Bitbucket installation archive was not found:
+      {{ role_path }}/files/{{ bitbucket_archive }}
+
+      Copy the Bitbucket archive into:
+      roles/bitbucket/files/
+    success_msg: >-
+      Bitbucket installation archive found:
+      {{ bitbucket_archive }}.
+
+
+# ------------------------------------------------------------
+# /app filesystem capacity
+# ------------------------------------------------------------
+
+- name: Determine filesystem containing Bitbucket base directory
+  ansible.builtin.set_fact:
+    bitbucket_mount: >-
+      {{
+        (
+          ansible_facts.mounts
+          | selectattr(
+              'mount',
+              'in',
+              [bitbucket_base_dir, '/']
+            )
+          | list
+          | sort(attribute='mount', reverse=true)
+          | first
+        )
+      }}
+
+- name: Calculate available Bitbucket filesystem space
+  ansible.builtin.set_fact:
+    bitbucket_available_space_gb: >-
+      {{
+        (
+          bitbucket_mount.size_available
+          | float
+          / 1024
+          / 1024
+          / 1024
+        ) | round(2)
+      }}
+
+- name: Display Bitbucket filesystem capacity
+  ansible.builtin.debug:
+    msg:
+      - "Mount point : {{ bitbucket_mount.mount }}"
+      - "Filesystem  : {{ bitbucket_mount.device }}"
+      - "Available   : {{ bitbucket_available_space_gb }} GB"
+
+- name: Verify minimum available disk space
+  ansible.builtin.assert:
+    that:
+      - bitbucket_available_space_gb | float >= 10
+    fail_msg: >-
+      Insufficient free space on the filesystem containing
+      {{ bitbucket_base_dir }}.
+      Available: {{ bitbucket_available_space_gb }} GB.
+      Minimum required by this automation: 10 GB.
+    success_msg: >-
+      Disk space validated.
+      Available: {{ bitbucket_available_space_gb }} GB.
+
+# ------------------------------------------------------------
+# Existing installation
+# ------------------------------------------------------------
+
+- name: Check existing Bitbucket installation directory
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}"
+  register: bitbucket_existing_installation
+
+- name: Report existing Bitbucket installation
+  ansible.builtin.debug:
+    msg: >-
+      Existing Bitbucket installation directory detected:
+      {{ bitbucket_install_dir }}.
+      Installation tasks will remain idempotent.
+  when: bitbucket_existing_installation.stat.exists
+
+# ------------------------------------------------------------
+# Java
+# ------------------------------------------------------------
+
+- name: Check existing Java
+  ansible.builtin.command:
+    cmd: java -version
+  register: bitbucket_java_check
+  changed_when: false
+  failed_when: false
+
+- name: Display existing Java information
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        bitbucket_java_check.stderr_lines
+        | default(bitbucket_java_check.stdout_lines)
+      }}
+  when: bitbucket_java_check.rc == 0
+
+- name: Report Java installation requirement
+  ansible.builtin.debug:
+    msg: >-
+      Java is not currently available.
+      OpenJDK 21 will be installed during prerequisites.
+  when: bitbucket_java_check.rc != 0
+
+# ------------------------------------------------------------
+# Git
+# ------------------------------------------------------------
+
+- name: Check existing Git installation
+  ansible.builtin.command:
+    cmd: git --version
+  register: bitbucket_git_check
+  changed_when: false
+  failed_when: false
+
+- name: Display existing Git version
+  ansible.builtin.debug:
+    msg: "{{ bitbucket_git_check.stdout }}"
+  when: bitbucket_git_check.rc == 0
+
+- name: Report Git installation requirement
+  ansible.builtin.debug:
+    msg: >-
+      Git is not currently installed.
+      Git will be installed during prerequisites.
+  when: bitbucket_git_check.rc != 0
+
+# ------------------------------------------------------------
+# Network ports
+# ------------------------------------------------------------
+
+- name: Check whether Bitbucket HTTP port is already listening
+  ansible.builtin.shell: |
+    ss -lnt | awk '{print $4}' | grep -Eq '(^|:){{ bitbucket_http_port }}$'
+  args:
+    executable: /bin/bash
+  register: bitbucket_http_port_check
+  changed_when: false
+  failed_when: false
+
+- name: Warn if Bitbucket HTTP port is already in use
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: TCP port {{ bitbucket_http_port }}
+      is already listening on this server.
+  when: bitbucket_http_port_check.rc == 0
+
+- name: Check whether Bitbucket SSH port is already listening
+  ansible.builtin.shell: |
+    ss -lnt | awk '{print $4}' | grep -Eq '(^|:){{ bitbucket_ssh_port }}$'
+  args:
+    executable: /bin/bash
+  register: bitbucket_ssh_port_check
+  changed_when: false
+  failed_when: false
+
+- name: Warn if Bitbucket SSH port is already in use
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: TCP port {{ bitbucket_ssh_port }}
+      is already listening on this server.
+  when: bitbucket_ssh_port_check.rc == 0
+
+# ------------------------------------------------------------
+# PostgreSQL connectivity
+# ------------------------------------------------------------
+
+- name: Check PostgreSQL TCP connectivity
+  ansible.builtin.wait_for:
+    host: "{{ postgres_host }}"
+    port: "{{ postgres_port }}"
+    timeout: 5
+    state: started
+  register: bitbucket_postgres_connectivity
+  ignore_errors: true
+
+- name: Verify PostgreSQL is reachable
+  ansible.builtin.assert:
+    that:
+      - bitbucket_postgres_connectivity is succeeded
+    fail_msg: >-
+      PostgreSQL is not reachable at
+      {{ postgres_host }}:{{ postgres_port }}.
+
+      Verify PostgreSQL 17 is running,
+      routing/firewall rules are correct,
+      and the database server accepts connections.
+    success_msg: >-
+      PostgreSQL connectivity validated:
+      {{ postgres_host }}:{{ postgres_port }}.
+
+# ------------------------------------------------------------
+# Cluster / shared storage
+# ------------------------------------------------------------
+
+- name: Validate clustered deployment variables
+  ansible.builtin.assert:
+    that:
+      - bitbucket_shared_home | length > 0
+    fail_msg: >-
+      bitbucket_shared_home must be configured
+      when bitbucket_clustered=true.
+    success_msg: >-
+      Shared home configured:
+      {{ bitbucket_shared_home }}.
+  when: bitbucket_clustered | bool
+
+# ------------------------------------------------------------
+# Precheck summary
+# ------------------------------------------------------------
+
+- name: Bitbucket precheck summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket prechecks completed"
+      - "OS               : {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+      - "Architecture     : {{ ansible_facts['architecture'] }}"
+      - "Free /app Space  : {{ bitbucket_available_space_gb }} GB"
+      - "Archive          : {{ bitbucket_archive }}"
+      - "Database         : {{ postgres_host }}:{{ postgres_port }}/{{ postgres_database }}"
+      - "HTTP Port        : {{ bitbucket_http_port }}"
+      - "SSH Port         : {{ bitbucket_ssh_port }}"
+      - "Clustered        : {{ bitbucket_clustered }}"
+      - "========================================"

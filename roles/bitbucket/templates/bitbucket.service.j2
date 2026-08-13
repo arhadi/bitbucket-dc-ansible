@@ -1,0 +1,35 @@
+[Unit]
+Description=Atlassian Bitbucket Data Center
+After=network-online.target postgresql-17.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+
+User={{ bitbucket_user }}
+Group={{ bitbucket_group }}
+
+Environment="BITBUCKET_HOME={{ bitbucket_home }}"
+Environment="JAVA_HOME={{ bitbucket_java_home }}"
+
+Environment="JVM_MINIMUM_MEMORY={{ bitbucket_jvm_minimum_memory }}"
+Environment="JVM_MAXIMUM_MEMORY={{ bitbucket_jvm_maximum_memory }}"
+
+WorkingDirectory={{ bitbucket_install_dir }}
+
+ExecStart={{ bitbucket_install_dir }}/bin/start-bitbucket.sh
+ExecStop={{ bitbucket_install_dir }}/bin/stop-bitbucket.sh
+
+TimeoutStartSec=600
+TimeoutStopSec=300
+
+Restart=on-failure
+RestartSec=10
+
+LimitNOFILE=65536
+LimitNPROC=65536
+
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

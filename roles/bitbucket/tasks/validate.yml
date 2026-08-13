@@ -1,0 +1,227 @@
+---
+# ============================================================
+# Bitbucket Data Center - Validation
+# ============================================================
+
+# ------------------------------------------------------------
+# Installation
+# ------------------------------------------------------------
+
+- name: Check Bitbucket installation directory
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}"
+  register: bitbucket_validate_install
+
+- name: Validate Bitbucket installation directory
+  ansible.builtin.assert:
+    that:
+      - bitbucket_validate_install.stat.exists
+      - bitbucket_validate_install.stat.isdir
+    fail_msg: >-
+      Bitbucket installation directory does not exist:
+      {{ bitbucket_install_dir }}
+
+# ------------------------------------------------------------
+# BITBUCKET_HOME
+# ------------------------------------------------------------
+
+- name: Check Bitbucket home directory
+  ansible.builtin.stat:
+    path: "{{ bitbucket_home }}"
+  register: bitbucket_validate_home
+
+- name: Validate Bitbucket home directory
+  ansible.builtin.assert:
+    that:
+      - bitbucket_validate_home.stat.exists
+      - bitbucket_validate_home.stat.isdir
+    fail_msg: >-
+      BITBUCKET_HOME does not exist:
+      {{ bitbucket_home }}
+
+# ------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------
+
+- name: Check Bitbucket properties
+  ansible.builtin.stat:
+    path: "{{ bitbucket_home }}/shared/bitbucket.properties"
+  register: bitbucket_validate_properties
+
+- name: Validate Bitbucket properties
+  ansible.builtin.assert:
+    that:
+      - bitbucket_validate_properties.stat.exists
+      - bitbucket_validate_properties.stat.isreg
+    fail_msg: >-
+      Bitbucket configuration file does not exist:
+      {{ bitbucket_home }}/shared/bitbucket.properties
+
+# ------------------------------------------------------------
+# systemd
+# ------------------------------------------------------------
+
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Validate Bitbucket systemd service
+  ansible.builtin.assert:
+    that:
+      - "(bitbucket_service_name + '.service') in ansible_facts.services"
+    fail_msg: >-
+      Bitbucket systemd service was not found:
+      {{ bitbucket_service_name }}.service
+    success_msg: >-
+      Bitbucket systemd service exists.
+
+# ------------------------------------------------------------
+# Start Bitbucket
+# ------------------------------------------------------------
+
+- name: Ensure Bitbucket service is enabled and started
+  ansible.builtin.systemd:
+    name: "{{ bitbucket_service_name }}"
+    enabled: true
+    state: started
+
+# ------------------------------------------------------------
+# Wait for HTTP port
+# ------------------------------------------------------------
+
+- name: Wait for Bitbucket HTTP port
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ bitbucket_http_port }}"
+    state: started
+    delay: 5
+    timeout: 300
+  register: bitbucket_http_port_check
+
+# ------------------------------------------------------------
+# HTTP validation
+#
+# Bitbucket may return redirects/setup pages during initial
+# startup, therefore accept normal HTTP redirect responses.
+# ------------------------------------------------------------
+
+- name: Validate Bitbucket HTTP endpoint
+  ansible.builtin.uri:
+    url: "{{ bitbucket_validation_url }}"
+    method: GET
+    follow_redirects: safe
+    status_code:
+      - 200
+      - 301
+      - 302
+      - 303
+      - 307
+      - 308
+    return_content: false
+    timeout: 30
+  register: bitbucket_http_validation
+  retries: "{{ bitbucket_validation_retries }}"
+  delay: "{{ bitbucket_validation_delay }}"
+  until: >-
+    bitbucket_http_validation.status | default(0)
+    in [200, 301, 302, 303, 307, 308]
+
+# ------------------------------------------------------------
+# SSH port
+# ------------------------------------------------------------
+
+- name: Wait for Bitbucket SSH port
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ bitbucket_ssh_port }}"
+    state: started
+    timeout: 120
+  register: bitbucket_ssh_port_check
+  when: bitbucket_ssh_validation_enabled | default(false) | bool
+
+# ------------------------------------------------------------
+# PostgreSQL final validation
+# ------------------------------------------------------------
+
+- name: Validate Bitbucket PostgreSQL connection
+  ansible.builtin.command:
+    argv:
+      - psql
+      - "--host={{ postgres_host }}"
+      - "--port={{ postgres_port | string }}"
+      - "--username={{ postgres_user }}"
+      - "--dbname={{ postgres_database }}"
+      - --no-password
+      - --tuples-only
+      - --no-align
+      - "--command=SELECT 1;"
+  environment:
+    PGPASSWORD: "{{ postgres_password }}"
+  register: bitbucket_validate_database
+  changed_when: false
+  no_log: true
+
+- name: Validate PostgreSQL response
+  ansible.builtin.assert:
+    that:
+      - bitbucket_validate_database.rc == 0
+      - bitbucket_validate_database.stdout | trim == '1'
+    fail_msg: >-
+      Final Bitbucket PostgreSQL connectivity validation failed.
+    success_msg: >-
+      PostgreSQL connectivity validated.
+
+# ------------------------------------------------------------
+# Runtime information
+# ------------------------------------------------------------
+
+- name: Get Bitbucket service status
+  ansible.builtin.command:
+    cmd: "systemctl is-active {{ bitbucket_service_name }}"
+  register: bitbucket_service_active
+  changed_when: false
+  failed_when: false
+
+- name: Get Bitbucket service enablement
+  ansible.builtin.command:
+    cmd: "systemctl is-enabled {{ bitbucket_service_name }}"
+  register: bitbucket_service_enabled
+  changed_when: false
+  failed_when: false
+
+# ------------------------------------------------------------
+# Final validation
+# ------------------------------------------------------------
+
+- name: Validate final Bitbucket service state
+  ansible.builtin.assert:
+    that:
+      - bitbucket_service_active.stdout | trim == 'active'
+      - bitbucket_service_enabled.stdout | trim == 'enabled'
+    fail_msg: >-
+      Bitbucket service validation failed.
+      Active={{ bitbucket_service_active.stdout | trim }},
+      Enabled={{ bitbucket_service_enabled.stdout | trim }}.
+    success_msg: >-
+      Bitbucket service is active and enabled.
+
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+
+- name: Bitbucket validation summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket validation completed"
+      - "Version           : {{ bitbucket_version }}"
+      - "Install Directory : {{ bitbucket_install_dir }}"
+      - "Home Directory    : {{ bitbucket_home }}"
+      - "HTTP Port         : {{ bitbucket_http_port }}"
+      - "SSH Port          : {{ bitbucket_ssh_port }}"
+      - "Database          : {{ postgres_database }}"
+      - "PostgreSQL        : {{ postgres_host }}:{{ postgres_port }}"
+      - "Service           : {{ bitbucket_service_name }}"
+      - "Service State     : {{ bitbucket_service_active.stdout | trim }}"
+      - "Service Enabled   : {{ bitbucket_service_enabled.stdout | trim }}"
+      - "Clustered         : {{ bitbucket_clustered }}"
+      - "========================================"
