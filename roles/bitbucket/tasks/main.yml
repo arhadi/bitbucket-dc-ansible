@@ -1,25 +1,78 @@
 ---
+# ============================================================
+# Atlassian Bitbucket Data Center
+# ============================================================
+
+# ------------------------------------------------------------
+# Precheck
+# ------------------------------------------------------------
+
 - name: Run Bitbucket prechecks
-  ansible.builtin.include_tasks: precheck.yml
+  ansible.builtin.import_tasks: precheck.yml
+  tags:
+    - always
+    - precheck
+
+# ------------------------------------------------------------
+# Prerequisites
+# ------------------------------------------------------------
 
 - name: Install Bitbucket prerequisites
-  ansible.builtin.include_tasks: prerequisites.yml
+  ansible.builtin.import_tasks: prerequisites.yml
+  tags:
+    - prerequisites
+
+# ------------------------------------------------------------
+# Install
+# ------------------------------------------------------------
 
 - name: Install Bitbucket
-  ansible.builtin.include_tasks: install.yml
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - install
+
+# ------------------------------------------------------------
+# Database
+# ------------------------------------------------------------
 
 - name: Validate Bitbucket database
-  ansible.builtin.include_tasks: database.yml
+  ansible.builtin.import_tasks: database.yml
+  tags:
+    - database
+
+# ------------------------------------------------------------
+# Configure
+# ------------------------------------------------------------
 
 - name: Configure Bitbucket
-  ansible.builtin.include_tasks: configure.yml
+  ansible.builtin.import_tasks: configure.yml
+  tags:
+    - configure
+
+# ------------------------------------------------------------
+# Cluster
+# ------------------------------------------------------------
 
 - name: Configure Bitbucket Data Center cluster
-  ansible.builtin.include_tasks: cluster.yml
+  ansible.builtin.import_tasks: cluster.yml
   when: bitbucket_clustered | bool
+  tags:
+    - cluster
+
+# ------------------------------------------------------------
+# Systemd
+# ------------------------------------------------------------
 
 - name: Configure Bitbucket systemd service
-  ansible.builtin.include_tasks: systemd.yml
+  ansible.builtin.import_tasks: systemd.yml
+  tags:
+    - systemd
+
+# ------------------------------------------------------------
+# Validate
+# ------------------------------------------------------------
 
 - name: Validate Bitbucket
-  ansible.builtin.include_tasks: validate.yml
+  ansible.builtin.import_tasks: validate.yml
+  tags:
+    - validate

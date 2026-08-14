@@ -1,0 +1,251 @@
+---
+# ============================================================
+# Bitbucket Data Center - Linux Binary Installer
+# ============================================================
+
+# ------------------------------------------------------------
+# Check existing installation
+# ------------------------------------------------------------
+
+- name: Check existing Bitbucket installation directory
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}"
+  register: bitbucket_installer_existing_install
+
+# ------------------------------------------------------------
+# Validate installer
+# ------------------------------------------------------------
+
+- name: Check Bitbucket binary installer
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ bitbucket_installer }}"
+  delegate_to: localhost
+  become: false
+  register: bitbucket_installer_check
+
+- name: Validate Bitbucket binary installer exists
+  ansible.builtin.assert:
+    that:
+      - bitbucket_installer_check.stat.exists
+      - bitbucket_installer_check.stat.isreg
+      - bitbucket_installer_check.stat.size > 0
+    fail_msg: >-
+      Bitbucket binary installer was not found or is empty:
+      {{ role_path }}/files/{{ bitbucket_installer }}
+    success_msg: >-
+      Bitbucket binary installer found:
+      {{ bitbucket_installer }}
+
+# ------------------------------------------------------------
+# Validate SHA256
+# ------------------------------------------------------------
+
+- name: Calculate Bitbucket installer SHA256
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ bitbucket_installer }}"
+    checksum_algorithm: sha256
+    get_checksum: true
+  delegate_to: localhost
+  become: false
+  register: bitbucket_installer_checksum
+
+- name: Validate Bitbucket installer SHA256
+  ansible.builtin.assert:
+    that:
+      - bitbucket_installer_checksum.stat.checksum == bitbucket_installer_sha256
+    fail_msg: >-
+      Bitbucket installer SHA256 validation failed.
+
+      Installer:
+      {{ bitbucket_installer }}
+
+      Expected:
+      {{ bitbucket_installer_sha256 }}
+
+      Actual:
+      {{ bitbucket_installer_checksum.stat.checksum }}
+    success_msg: >-
+      Bitbucket installer SHA256 validated successfully.
+
+# ------------------------------------------------------------
+# Stage installer
+# ------------------------------------------------------------
+
+- name: Copy Bitbucket installer to temporary directory
+  ansible.builtin.copy:
+    src: "{{ bitbucket_installer }}"
+    dest: "{{ bitbucket_temp_dir }}/{{ bitbucket_installer }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: not bitbucket_installer_existing_install.stat.exists
+
+# ------------------------------------------------------------
+# Response file
+# ------------------------------------------------------------
+
+- name: Generate Bitbucket installer response file
+  ansible.builtin.template:
+    src: response.varfile.j2
+    dest: "{{ bitbucket_response_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not bitbucket_installer_existing_install.stat.exists
+
+# ------------------------------------------------------------
+# Run unattended installer
+# ------------------------------------------------------------
+
+- name: Install Bitbucket using binary installer
+  ansible.builtin.command:
+    argv:
+      - "{{ bitbucket_temp_dir }}/{{ bitbucket_installer }}"
+      - -q
+      - -varfile
+      - "{{ bitbucket_response_file }}"
+  args:
+    creates: "{{ bitbucket_install_dir }}"
+  register: bitbucket_binary_install
+  when: not bitbucket_installer_existing_install.stat.exists
+
+# ------------------------------------------------------------
+# Validate installation directory
+# ------------------------------------------------------------
+
+- name: Check Bitbucket installation directory after installer
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}"
+  register: bitbucket_binary_install_dir
+
+- name: Verify Bitbucket binary installation
+  ansible.builtin.assert:
+    that:
+      - bitbucket_binary_install_dir.stat.exists
+      - bitbucket_binary_install_dir.stat.isdir
+    fail_msg: >-
+      Bitbucket binary installation failed.
+
+      Expected installation directory:
+      {{ bitbucket_install_dir }}
+    success_msg: >-
+      Bitbucket {{ bitbucket_version }} binary installation completed.
+
+# ------------------------------------------------------------
+# Configure Bitbucket runtime user
+#
+# The Bitbucket binary installer does not automatically configure
+# the service account when installation-as-service is disabled.
+# ------------------------------------------------------------
+
+- name: Check Bitbucket user configuration script
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}/bin/set-bitbucket-user.sh"
+  register: bitbucket_user_script
+
+- name: Configure BITBUCKET_USER
+  ansible.builtin.lineinfile:
+    path: "{{ bitbucket_install_dir }}/bin/set-bitbucket-user.sh"
+    regexp: '^BITBUCKET_USER='
+    line: 'BITBUCKET_USER="{{ bitbucket_user }}"'
+    backup: true
+  when: bitbucket_user_script.stat.exists
+
+# ------------------------------------------------------------
+# Configure BITBUCKET_HOME
+# ------------------------------------------------------------
+
+- name: Configure BITBUCKET_HOME after binary installation
+  ansible.builtin.lineinfile:
+    path: "{{ bitbucket_install_dir }}/bin/set-bitbucket-home.sh"
+    regexp: '^[#[:space:]]*export[[:space:]]+BITBUCKET_HOME='
+    line: 'export BITBUCKET_HOME="{{ bitbucket_home }}"'
+    insertafter: EOF
+    backup: true
+
+# ------------------------------------------------------------
+# Ownership
+# ------------------------------------------------------------
+
+- name: Set Bitbucket installation ownership
+  ansible.builtin.file:
+    path: "{{ bitbucket_install_dir }}"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    recurse: true
+
+- name: Set Bitbucket home ownership
+  ansible.builtin.file:
+    path: "{{ bitbucket_home }}"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    recurse: true
+
+# ------------------------------------------------------------
+# Validate startup scripts
+# ------------------------------------------------------------
+
+- name: Check Bitbucket startup script
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}/bin/start-bitbucket.sh"
+  register: bitbucket_start_script
+
+- name: Check Bitbucket shutdown script
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}/bin/stop-bitbucket.sh"
+  register: bitbucket_stop_script
+
+- name: Check Bitbucket home script
+  ansible.builtin.stat:
+    path: "{{ bitbucket_install_dir }}/bin/set-bitbucket-home.sh"
+  register: bitbucket_home_script
+
+- name: Validate Bitbucket installer output
+  ansible.builtin.assert:
+    that:
+      - bitbucket_start_script.stat.exists
+      - bitbucket_start_script.stat.isreg
+      - bitbucket_stop_script.stat.exists
+      - bitbucket_stop_script.stat.isreg
+      - bitbucket_home_script.stat.exists
+      - bitbucket_home_script.stat.isreg
+    fail_msg: >-
+      Bitbucket binary installer completed but required
+      Bitbucket scripts could not be found under:
+      {{ bitbucket_install_dir }}
+    success_msg: >-
+      Bitbucket installation scripts validated successfully.
+
+# ------------------------------------------------------------
+# Cleanup
+# ------------------------------------------------------------
+
+- name: Remove temporary Bitbucket response file
+  ansible.builtin.file:
+    path: "{{ bitbucket_response_file }}"
+    state: absent
+
+- name: Remove temporary Bitbucket installer
+  ansible.builtin.file:
+    path: "{{ bitbucket_temp_dir }}/{{ bitbucket_installer }}"
+    state: absent
+
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+
+- name: Bitbucket binary installation summary
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "Bitbucket binary installation completed"
+      - "Version        : {{ bitbucket_version }}"
+      - "Method         : installer"
+      - "Install Dir    : {{ bitbucket_install_dir }}"
+      - "Home Dir       : {{ bitbucket_home }}"
+      - "Runtime User   : {{ bitbucket_user }}"
+      - "Runtime Group  : {{ bitbucket_group }}"
+      - "HTTP Port      : {{ bitbucket_http_port }}"
+      - "========================================"

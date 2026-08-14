@@ -10,14 +10,43 @@ bitbucket_group: bitbucket
 
 # ============================================================
 # Installation
+
+# Supported:
+#   installer = Atlassian Linux .bin installer
+#   archive   = Atlassian tar.gz archive
 # ============================================================
 
-bitbucket_base_dir: /app
+bitbucket_install_method: "installer"
 
-bitbucket_install_dir: "/app/bitbucket-{{ bitbucket_version }}"
-bitbucket_home: /app/bitbucket-data
+bitbucket_base_dir: "/app"
+
+bitbucket_install_dir: "{{ bitbucket_base_dir }}/bitbucket-{{ bitbucket_version }}"
+bitbucket_home: "{{ bitbucket_base_dir }}/bitbucket-data"
+
+# ------------------------------------------------------------
+# Linux Binary Installer
+# ------------------------------------------------------------
+
+bitbucket_installer: "atlassian-bitbucket-{{ bitbucket_version }}-x64.bin"
+
+bitbucket_installer_sha256: "4b3f5026cf3afd1a60d0153840dc377433e8a3a6b358bfb258e43e9c3b2c0d27"
+
+# ------------------------------------------------------------
+# Archive Installer
+# ------------------------------------------------------------
 
 bitbucket_archive: "atlassian-bitbucket-{{ bitbucket_version }}.tar.gz"
+
+# Add the tar.gz SHA256 after verifying it:
+# sha256sum roles/bitbucket/files/atlassian-bitbucket-10.4.2.tar.gz
+bitbucket_archive_sha256: "49e6e7962ea30dcc78179bceed87de317bc4ec06cd8a4870a6060f43e478d289"
+
+# ------------------------------------------------------------
+# Installer temporary files
+# ------------------------------------------------------------
+
+bitbucket_temp_dir: "/var/tmp"
+bitbucket_response_file: "{{ bitbucket_temp_dir }}/bitbucket-response.varfile"
 
 # ============================================================
 # Java
@@ -59,9 +88,22 @@ bitbucket_jvm_maximum_memory: 4g
 # Data Center / Cluster
 # ============================================================
 
+# ============================================================
+# Data Center / Cluster
+# ============================================================
+
 bitbucket_clustered: true
+
+# Bitbucket stores shared application data under
+# $BITBUCKET_HOME/shared.
+#
+# For the current single-node Data Center deployment this is:
+# /app/bitbucket-data/shared
+#
+# For a real multi-node cluster, this location must be backed
+# by shared storage accessible from every Bitbucket node.
 bitbucket_shared_home_enabled: true
-bitbucket_shared_home: /app/bitbucket-shared
+bitbucket_shared_home: "{{ bitbucket_home }}/shared"
 
 # ============================================================
 # Service

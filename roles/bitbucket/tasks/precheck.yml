@@ -64,31 +64,46 @@
       {{ ansible_facts['architecture'] }}.
 
 # ------------------------------------------------------------
-# Installation archive
+# Installation media
 # ------------------------------------------------------------
 
-- name: Check Bitbucket installation archive
-  ansible.builtin.stat:
-    path: "{{ role_path }}/files/{{ bitbucket_archive }}"
-  delegate_to: localhost
-  become: false
-  register: bitbucket_archive_check
-
-- name: Verify Bitbucket installation archive exists
+- name: Validate Bitbucket installation method
   ansible.builtin.assert:
     that:
-      - bitbucket_archive_check.stat.exists
-      - bitbucket_archive_check.stat.isreg
+      - bitbucket_install_method in ['installer', 'archive']
     fail_msg: >-
-      Bitbucket installation archive was not found:
-      {{ role_path }}/files/{{ bitbucket_archive }}
+      Unsupported Bitbucket installation method:
+      {{ bitbucket_install_method }}.
+      Supported methods are installer and archive.
 
-      Copy the Bitbucket archive into:
-      roles/bitbucket/files/
+- name: Determine Bitbucket installation media
+  ansible.builtin.set_fact:
+    bitbucket_install_media: >-
+      {{
+        bitbucket_installer
+        if bitbucket_install_method == 'installer'
+        else bitbucket_archive
+      }}
+
+- name: Check Bitbucket installation media
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/{{ bitbucket_install_media }}"
+  delegate_to: localhost
+  become: false
+  register: bitbucket_install_media_check
+
+- name: Verify Bitbucket installation media exists
+  ansible.builtin.assert:
+    that:
+      - bitbucket_install_media_check.stat.exists
+      - bitbucket_install_media_check.stat.isreg
+      - bitbucket_install_media_check.stat.size > 0
+    fail_msg: >-
+      Bitbucket installation media was not found:
+      {{ role_path }}/files/{{ bitbucket_install_media }}
     success_msg: >-
-      Bitbucket installation archive found:
-      {{ bitbucket_archive }}.
-
+      Bitbucket installation media found:
+      {{ bitbucket_install_media }}
 
 # ------------------------------------------------------------
 # /app filesystem capacity
@@ -303,7 +318,8 @@
       - "OS               : {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
       - "Architecture     : {{ ansible_facts['architecture'] }}"
       - "Free /app Space  : {{ bitbucket_available_space_gb }} GB"
-      - "Archive          : {{ bitbucket_archive }}"
+      - "Install Method   : {{ bitbucket_install_method }}"
+      - "Install Media    : {{ bitbucket_install_media }}"
       - "Database         : {{ postgres_host }}:{{ postgres_port }}/{{ postgres_database }}"
       - "HTTP Port        : {{ bitbucket_http_port }}"
       - "SSH Port         : {{ bitbucket_ssh_port }}"

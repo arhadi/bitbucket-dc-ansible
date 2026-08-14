@@ -13,7 +13,9 @@ bitbucket_home:
   "{{ bitbucket_base_dir }}/bitbucket-data"
 
 bitbucket_shared_home:
-  "{{ bitbucket_base_dir }}/bitbucket-shared"
+  "{{ bitbucket_home }}/shared"
+
+bitbucket_shared_home_enabled: false
 
 bitbucket_archive:
   "atlassian-bitbucket-{{ bitbucket_version }}.tar.gz"

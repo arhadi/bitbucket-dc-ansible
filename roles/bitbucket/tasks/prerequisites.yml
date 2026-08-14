@@ -56,7 +56,7 @@
 
 - name: Create Bitbucket shared configuration directory
   ansible.builtin.file:
-    path: "{{ bitbucket_home }}/shared"
+    path: "{{ bitbucket_shared_home }}"
     state: directory
     owner: "{{ bitbucket_user }}"
     group: "{{ bitbucket_group }}"

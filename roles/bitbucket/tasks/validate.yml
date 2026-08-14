@@ -45,7 +45,7 @@
 
 - name: Check Bitbucket properties
   ansible.builtin.stat:
-    path: "{{ bitbucket_home }}/shared/bitbucket.properties"
+    path: "{{ bitbucket_shared_home }}/bitbucket.properties"
   register: bitbucket_validate_properties
 
 - name: Validate Bitbucket properties
@@ -55,7 +55,7 @@
       - bitbucket_validate_properties.stat.isreg
     fail_msg: >-
       Bitbucket configuration file does not exist:
-      {{ bitbucket_home }}/shared/bitbucket.properties
+      {{ bitbucket_shared_home }}/bitbucket.properties
 
 # ------------------------------------------------------------
 # systemd

@@ -3,13 +3,21 @@
 # Bitbucket Data Center - Configuration
 # ============================================================
 
+# ------------------------------------------------------------
+# Bitbucket Shared Home
+# ------------------------------------------------------------
+
 - name: Create Bitbucket shared directory
   ansible.builtin.file:
-    path: "{{ bitbucket_home }}/shared"
+    path: "{{ bitbucket_shared_home }}"
     state: directory
     owner: "{{ bitbucket_user }}"
     group: "{{ bitbucket_group }}"
     mode: "0750"
+
+# ------------------------------------------------------------
+# Bitbucket Runtime Directories
+# ------------------------------------------------------------
 
 - name: Create Bitbucket log directory
   ansible.builtin.file:
@@ -46,7 +54,7 @@
 - name: Configure Bitbucket properties
   ansible.builtin.template:
     src: bitbucket.properties.j2
-    dest: "{{ bitbucket_home }}/shared/bitbucket.properties"
+    dest: "{{ bitbucket_shared_home }}/bitbucket.properties"
     owner: "{{ bitbucket_user }}"
     group: "{{ bitbucket_group }}"
     mode: "0600"
@@ -74,7 +82,8 @@
       - "========================================"
       - "Bitbucket configuration completed"
       - "BITBUCKET_HOME : {{ bitbucket_home }}"
-      - "Properties     : {{ bitbucket_home }}/shared/bitbucket.properties"
+      - "Shared Home    : {{ bitbucket_shared_home }}"
+      - "Properties     : {{ bitbucket_shared_home }}/bitbucket.properties"
       - "Database       : {{ postgres_host }}:{{ postgres_port }}/{{ postgres_database }}"
       - "HTTP           : {{ bitbucket_http_port }}"
       - "SSH            : {{ bitbucket_ssh_port }}"

@@ -155,6 +155,28 @@
       {{ bitbucket_install_dir }}
     success_msg: "Bitbucket application binaries removed successfully."
 
+- name: Validate Bitbucket home preservation
+  ansible.builtin.assert:
+    that:
+      - bitbucket_home_after_uninstall.stat.exists
+    fail_msg: >-
+      Bitbucket home was unexpectedly removed:
+      {{ bitbucket_home }}
+    success_msg: >-
+      Bitbucket home preserved successfully:
+      {{ bitbucket_home }}
+  when: not (bitbucket_purge_data | default(false) | bool)
+
+- name: Validate Bitbucket home removal
+  ansible.builtin.assert:
+    that:
+      - not bitbucket_home_after_uninstall.stat.exists
+    fail_msg: >-
+      Bitbucket home still exists after purge:
+      {{ bitbucket_home }}
+    success_msg: "Bitbucket home removed successfully."
+  when: bitbucket_purge_data | default(false) | bool
+
 
 # ------------------------------------------------------------
 # Summary
@@ -165,11 +187,12 @@
     msg:
       - "========================================"
       - "Bitbucket uninstall completed"
-      - "Install Dir : {{ 'REMOVED' if (bitbucket_remove_install_dir | default(true) | bool) else 'PRESERVED' }}"
-      - "Home Dir    : {{ 'REMOVED' if (bitbucket_remove_home | default(false) | bool) else 'PRESERVED' }}"
-      - "Shared Home : {{ 'REMOVED' if (bitbucket_remove_shared_home | default(false) | bool) else 'PRESERVED' }}"
+      - "Install Dir : REMOVED"
+      - "Home Dir    : {{ 'REMOVED' if (bitbucket_purge_data | default(false) | bool) else 'PRESERVED' }}"
+      - "Shared Home : {{ 'REMOVED' if (bitbucket_purge_data | default(false) | bool) else 'PRESERVED' }}"
       - "Service     : REMOVED"
-      - "OS User     : {{ 'REMOVED' if (bitbucket_remove_user | default(false) | bool) else 'PRESERVED' }}"
-      - "OS Group    : {{ 'REMOVED' if (bitbucket_remove_group | default(false) | bool) else 'PRESERVED' }}"
+      - "OS User     : {{ 'REMOVED' if (bitbucket_purge_data | default(false) | bool) else 'PRESERVED' }}"
+      - "OS Group    : {{ 'REMOVED' if (bitbucket_purge_data | default(false) | bool) else 'PRESERVED' }}"
       - "Database    : NOT MODIFIED"
+      - "DB User     : NOT MODIFIED"
       - "========================================"

@@ -10,5 +10,32 @@
       - "Bitbucket Data Center mode"
       - "Node        : {{ inventory_hostname }}"
       - "Home        : {{ bitbucket_home }}"
-      - "Shared      : {{ bitbucket_home }}/shared"
+      - "Shared Home : {{ bitbucket_shared_home }}"
+      - "Clustered   : {{ bitbucket_clustered }}"
       - "========================================"
+
+- name: Ensure Bitbucket shared home exists
+  ansible.builtin.file:
+    path: "{{ bitbucket_shared_home }}"
+    state: directory
+    owner: "{{ bitbucket_user }}"
+    group: "{{ bitbucket_group }}"
+    mode: "0750"
+  when: bitbucket_shared_home_enabled | bool
+
+- name: Verify Bitbucket shared home
+  ansible.builtin.stat:
+    path: "{{ bitbucket_shared_home }}"
+  register: bitbucket_shared_home_stat
+
+- name: Validate Bitbucket shared home
+  ansible.builtin.assert:
+    that:
+      - bitbucket_shared_home_stat.stat.exists
+      - bitbucket_shared_home_stat.stat.isdir
+    fail_msg: >-
+      Bitbucket shared home {{ bitbucket_shared_home }}
+      does not exist or is not a directory.
+    success_msg: >-
+      Bitbucket shared home {{ bitbucket_shared_home }}
+      is available.

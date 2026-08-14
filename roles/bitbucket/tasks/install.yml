@@ -1,125 +1,21 @@
 ---
 # ============================================================
-# Bitbucket Data Center - Installation
+# Bitbucket Data Center - Installation Dispatcher
 # ============================================================
 
-- name: Check Bitbucket installation directory
-  ansible.builtin.stat:
-    path: "{{ bitbucket_install_dir }}"
-  register: bitbucket_install_dir_check
-
-- name: Check Bitbucket archive
-  ansible.builtin.stat:
-    path: "{{ role_path }}/files/{{ bitbucket_archive }}"
-  register: bitbucket_archive_check
-
-- name: Validate Bitbucket archive exists
+- name: Validate Bitbucket installation method
   ansible.builtin.assert:
     that:
-      - bitbucket_archive_check.stat.exists
-      - bitbucket_archive_check.stat.isreg
-      - bitbucket_archive_check.stat.size > 0
+      - bitbucket_install_method in ['installer', 'archive']
     fail_msg: >-
-      Bitbucket archive not found or empty:
-      {{ role_path }}/files/{{ bitbucket_archive }}
-    success_msg: >-
-      Bitbucket archive validated:
-      {{ bitbucket_archive }}
+      Unsupported bitbucket_install_method:
+      {{ bitbucket_install_method }}.
+      Supported methods are installer and archive.
 
-- name: Create temporary Bitbucket extraction directory
-  ansible.builtin.tempfile:
-    state: directory
-    prefix: bitbucket-install-
-  register: bitbucket_extract_tmp
-  when: not bitbucket_install_dir_check.stat.exists
+- name: Install Bitbucket using Linux binary installer
+  ansible.builtin.include_tasks: install_installer.yml
+  when: bitbucket_install_method == 'installer'
 
-- name: Extract Bitbucket archive
-  ansible.builtin.unarchive:
-    src: "{{ bitbucket_archive }}"
-    dest: "{{ bitbucket_extract_tmp.path }}"
-    remote_src: false
-  when: not bitbucket_install_dir_check.stat.exists
-
-- name: Check extracted Bitbucket directory
-  ansible.builtin.stat:
-    path: "{{ bitbucket_extract_tmp.path }}/atlassian-bitbucket-{{ bitbucket_version }}"
-  register: bitbucket_extracted_dir
-  when: not bitbucket_install_dir_check.stat.exists
-
-- name: Validate extracted Bitbucket directory
-  ansible.builtin.assert:
-    that:
-      - bitbucket_extracted_dir.stat.exists
-      - bitbucket_extracted_dir.stat.isdir
-    fail_msg: >-
-      Expected extracted directory was not found:
-      {{ bitbucket_extract_tmp.path }}/atlassian-bitbucket-{{ bitbucket_version }}
-  when: not bitbucket_install_dir_check.stat.exists
-
-- name: Move Bitbucket installation into place
-  ansible.builtin.command:
-    argv:
-      - mv
-      - "{{ bitbucket_extract_tmp.path }}/atlassian-bitbucket-{{ bitbucket_version }}"
-      - "{{ bitbucket_install_dir }}"
-  args:
-    creates: "{{ bitbucket_install_dir }}"
-  when: not bitbucket_install_dir_check.stat.exists
-
-- name: Remove temporary Bitbucket extraction directory
-  ansible.builtin.file:
-    path: "{{ bitbucket_extract_tmp.path }}"
-    state: absent
-  when:
-    - not bitbucket_install_dir_check.stat.exists
-    - bitbucket_extract_tmp.path is defined
-
-- name: Set Bitbucket installation ownership
-  ansible.builtin.file:
-    path: "{{ bitbucket_install_dir }}"
-    state: directory
-    owner: "{{ bitbucket_user }}"
-    group: "{{ bitbucket_group }}"
-    recurse: true
-
-- name: Check Bitbucket startup script
-  ansible.builtin.stat:
-    path: "{{ bitbucket_install_dir }}/bin/start-bitbucket.sh"
-  register: bitbucket_start_script
-
-- name: Check Bitbucket shutdown script
-  ansible.builtin.stat:
-    path: "{{ bitbucket_install_dir }}/bin/stop-bitbucket.sh"
-  register: bitbucket_stop_script
-
-- name: Check Bitbucket home configuration script
-  ansible.builtin.stat:
-    path: "{{ bitbucket_install_dir }}/bin/set-bitbucket-home.sh"
-  register: bitbucket_home_script
-
-- name: Validate Bitbucket installation
-  ansible.builtin.assert:
-    that:
-      - bitbucket_start_script.stat.exists
-      - bitbucket_start_script.stat.isreg
-      - bitbucket_stop_script.stat.exists
-      - bitbucket_stop_script.stat.isreg
-      - bitbucket_home_script.stat.exists
-      - bitbucket_home_script.stat.isreg
-    fail_msg: >-
-      Bitbucket installation validation failed under
-      {{ bitbucket_install_dir }}.
-    success_msg: >-
-      Bitbucket {{ bitbucket_version }} installation validated.
-
-- name: Bitbucket installation summary
-  ansible.builtin.debug:
-    msg:
-      - "========================================"
-      - "Bitbucket installation completed"
-      - "Version     : {{ bitbucket_version }}"
-      - "Install Dir : {{ bitbucket_install_dir }}"
-      - "Home Dir    : {{ bitbucket_home }}"
-      - "User        : {{ bitbucket_user }}"
-      - "Group       : {{ bitbucket_group }}"
-      - "========================================"
+- name: Install Bitbucket using archive
+  ansible.builtin.include_tasks: install_archive.yml
+  when: bitbucket_install_method == 'archive'
