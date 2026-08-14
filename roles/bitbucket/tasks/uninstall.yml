@@ -39,20 +39,23 @@
 
 
 # ------------------------------------------------------------
-# Discover Bitbucket service
+# Detect Bitbucket systemd service
 # ------------------------------------------------------------
 
-- name: Gather service facts
-  ansible.builtin.service_facts:
+- name: Check Bitbucket systemd service unit
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ bitbucket_service_name }}.service"
+  register: bitbucket_service_unit
 
 - name: Determine whether Bitbucket service exists
   ansible.builtin.set_fact:
-    bitbucket_service_exists: >-
-      {{
-        (bitbucket_service_name + '.service')
-        in ansible_facts.services
-      }}
+    bitbucket_service_exists: "{{ bitbucket_service_unit.stat.exists }}"
 
+- name: Display Bitbucket service status
+  ansible.builtin.debug:
+    msg: >-
+      Bitbucket service {{ bitbucket_service_name }}:
+      {{ 'present' if bitbucket_service_exists else 'not installed' }}
 
 # ------------------------------------------------------------
 # Stop and disable Bitbucket
@@ -70,22 +73,26 @@
     enabled: false
   when: bitbucket_service_exists | bool
 
-
 # ------------------------------------------------------------
-# Remove systemd unit
+# Remove systemd service
 # ------------------------------------------------------------
 
-- name: Remove Bitbucket systemd service
+- name: Remove Bitbucket systemd unit
   ansible.builtin.file:
     path: "/etc/systemd/system/{{ bitbucket_service_name }}.service"
     state: absent
-  register: bitbucket_systemd_unit_removed
+  register: bitbucket_service_removed
 
-- name: Reload systemd daemon
+- name: Reload systemd after service removal
   ansible.builtin.systemd:
     daemon_reload: true
-  when: bitbucket_systemd_unit_removed.changed
+  when: bitbucket_service_removed.changed
 
+- name: Reset failed Bitbucket systemd state
+  ansible.builtin.command:
+    cmd: systemctl reset-failed
+  changed_when: false
+  when: bitbucket_service_removed.changed
 
 # ------------------------------------------------------------
 # Remove Bitbucket application binaries
@@ -96,7 +103,6 @@
     path: "{{ bitbucket_install_dir }}"
     state: absent
 
-
 # ------------------------------------------------------------
 # Optional data purge
 # ------------------------------------------------------------
@@ -106,7 +112,6 @@
     path: "{{ bitbucket_home }}"
     state: absent
   when: bitbucket_purge_data | default(false) | bool
-
 
 # ------------------------------------------------------------
 # Service account
@@ -126,7 +131,6 @@
     name: "{{ bitbucket_group }}"
     state: absent
   when: bitbucket_purge_data | default(false) | bool
-
 
 # ------------------------------------------------------------
 # Final status
@@ -156,19 +160,16 @@
 # Summary
 # ------------------------------------------------------------
 
-- name: Bitbucket uninstall summary
+- name: Display Bitbucket uninstall summary
   ansible.builtin.debug:
     msg:
       - "========================================"
       - "Bitbucket uninstall completed"
-      - "Install Dir : {{ bitbucket_install_dir }} - REMOVED"
-      - >-
-        Home Dir    : {{ bitbucket_home }} -
-        {{
-          'REMOVED'
-          if (bitbucket_purge_data | default(false) | bool)
-          else 'PRESERVED'
-        }}
-      - "Database    : {{ postgres_database }} - PRESERVED"
-      - "DB User     : {{ postgres_user }} - PRESERVED"
+      - "Install Dir : {{ 'REMOVED' if (bitbucket_remove_install_dir | default(true) | bool) else 'PRESERVED' }}"
+      - "Home Dir    : {{ 'REMOVED' if (bitbucket_remove_home | default(false) | bool) else 'PRESERVED' }}"
+      - "Shared Home : {{ 'REMOVED' if (bitbucket_remove_shared_home | default(false) | bool) else 'PRESERVED' }}"
+      - "Service     : REMOVED"
+      - "OS User     : {{ 'REMOVED' if (bitbucket_remove_user | default(false) | bool) else 'PRESERVED' }}"
+      - "OS Group    : {{ 'REMOVED' if (bitbucket_remove_group | default(false) | bool) else 'PRESERVED' }}"
+      - "Database    : NOT MODIFIED"
       - "========================================"

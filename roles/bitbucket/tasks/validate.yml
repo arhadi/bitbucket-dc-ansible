@@ -225,3 +225,5 @@
       - "Service Enabled   : {{ bitbucket_service_enabled.stdout | trim }}"
       - "Clustered         : {{ bitbucket_clustered }}"
       - "========================================"
+      - "Next: Complete setup at http://{{ ansible_default_ipv4.address | default(inventory_hostname) }}:{{ bitbucket_http_port }}"
+      - "Complete the Bitbucket Setup Wizard and apply the Data Center license."
